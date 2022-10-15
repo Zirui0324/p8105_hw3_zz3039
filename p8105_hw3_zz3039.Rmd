@@ -1,0 +1,200 @@
+---
+title: "p8105_hw2_zz3039.Rmd"
+output: github_document
+date: "2022-10-12"
+---
+```{r chunk_library, message=FALSE}
+library(tidyverse)
+library(readr)
+library(p8105.datasets)
+library(ggridges)
+library(patchwork)
+```
+
+
+## Problem 2
+
+```{r chunk_p2_1, message = FALSE}
+accel_data = read_csv("./data/accel_data.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(
+    day_type = 
+      case_when(
+        day %in% c("Saturday", "Sunday") ~ "weekend",
+        TRUE ~ "weekday"),
+    accel_day = 
+      rowSums(.[4:1443]),
+    day = 
+      forcats::fct_relevel(day, c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")),
+    day_type = 
+      forcats::fct_relevel(day_type, c("weekday", "weekend"))) %>%
+  arrange(week, day_id, day, day_type, accel_day) %>% 
+  select(week, day_id, day, day_type, accel_day, everything())
+
+accel_data_tidy = 
+  accel_data %>% 
+  pivot_longer(
+    activity_1:activity_1440,
+    names_to = "time_min",
+    names_prefix = "activity_",
+    values_to = "accel_minute"
+  ) %>% 
+  select(week, day_id, day, day_type, time_min, accel_minute, accel_day)
+```
+This dataset has **`r ncol(accel_data_tidy)`** variables, including **`r names(accel_data_tidy)`**, and total **`r nrow(accel_data_tidy) `** observations.
+
+```{r chunk_p2_2}
+accel_data_day =
+  accel_data %>% 
+  select(week, day_id, day, day_type, accel_day) 
+print(accel_data_day, n = 20)
+```
+
+Actually I can't see any trends apparent here in the activity data for each day.
+
+```{r chunk_p2_3, message = FALSE}
+hour_data = 
+  accel_data %>% 
+  mutate(
+    hour_1 = rowSums(.[6:65]),
+    hour_2 = rowSums(.[66:125]),
+    hour_3 = rowSums(.[126:185]),
+    hour_4 = rowSums(.[186:245]),
+    hour_5 = rowSums(.[246:305]),
+    hour_6 = rowSums(.[306:365]),
+    hour_7 = rowSums(.[366:425]),
+    hour_8 = rowSums(.[426:485]),
+    hour_9 = rowSums(.[486:545]),
+    hour_10 = rowSums(.[546:605]),
+    hour_11 = rowSums(.[606:665]),
+    hour_12 = rowSums(.[666:725]),
+    hour_13 = rowSums(.[726:785]),
+    hour_14 = rowSums(.[786:845]),
+    hour_15 = rowSums(.[846:905]),
+    hour_16 = rowSums(.[906:965]),
+    hour_17 = rowSums(.[966:1025]),
+    hour_18 = rowSums(.[1026:1085]),
+    hour_19 = rowSums(.[1086:1145]),
+    hour_20 = rowSums(.[1146:1205]),
+    hour_21 = rowSums(.[1206:1265]),
+    hour_22 = rowSums(.[1266:1325]),
+    hour_23 = rowSums(.[1326:1385]),
+    hour_24 = rowSums(.[1386:1445])
+  ) %>% 
+  pivot_longer(
+    hour_1:hour_24,
+    names_to = "hour",
+    names_prefix = "hour_",
+    values_to = "accel_hour",
+    ) %>% 
+  mutate(
+    hour = as.numeric(hour),
+    day_id = as.character(day_id)) %>% 
+  select(week, day_id, day, day_type, accel_day, hour, accel_hour)
+
+plot_hour_data = 
+  hour_data %>% 
+  ggplot(aes(x = hour, y = accel_hour, fill = day_id, color = day)) +
+  geom_line() +
+  viridis::scale_color_viridis(
+    name = "day", 
+    discrete = TRUE) +
+  labs(
+    title = "Hourly plot of accelerometer data",
+    x = "Hour of the day",
+    y = "Accelerometer data") +
+  scale_x_continuous(
+    breaks = c(0, 12, 24),
+    labels = c("0", "12", "24"),
+    limits = c(0, 24)) +
+  theme(legend.position = "bottom")
+plot_hour_data
+```
+
+From the graph we can tell that the accelerometer data was generally low in the first 5 hours of the day, while having peaks during 5~10 hours and 20~25 hours. The weekday or weekend pattern of accelerometer data was not very clear but it can be seen that the peak in 20~25 hours was mostly caused by accelerometer data from weekdays, and the Sunday data showed unusual peak during 10~12.5 hours of the day.
+
+## Problem 3
+
+```{r chunk_p3_preparation}
+ny_noaa %>% 
+  count(id, name = "n_obs_id")
+ny_noaa %>% 
+  count(date, name = "n_obs_date")
+na_prcp = sum(is.na(ny_noaa$prcp)) / nrow(ny_noaa)
+na_prcp
+na_snow = sum(is.na(ny_noaa$snow)) / nrow(ny_noaa)
+na_snow
+na_snwd = sum(is.na(ny_noaa$snwd)) / nrow(ny_noaa)
+na_snwd
+na_tmax = sum(is.na(ny_noaa$tmax)) / nrow(ny_noaa)
+na_tmax
+na_tmin = sum(is.na(ny_noaa$tmin)) / nrow(ny_noaa)
+na_tmin
+```
+
+The dataset **ny_noaa** has **`r ncol(ny_noaa)`** variables, namely **`r names(ny_noaa)`**, with **`r nrow(ny_noaa)`** observations. The **"id"** variable includes **747** specific id numbers, and the **"date"** variable includes **10957** specific days.
+
+The propotion of missing value in the variables **"prcp", "snow", "snwd", "tamx" and "tmin"** all exceeded **5%**, which should be paid attention to.
+
+```{r chunk_p3_1}
+noaa1 = 
+  ny_noaa %>% 
+  separate(date, into = c("year", "month", "day"), sep = "-") %>% 
+  mutate(
+    tmax = as.numeric(tmax)/10,
+    tmin = as.numeric(tmin)/10,
+    month = as.integer(month),
+    month = month.abb[month],
+    year = as.numeric(year))
+snow_data = 
+  noaa1 %>% 
+  count(snow, name = "n_obs", sort = TRUE)
+snow_data
+```
+The 5 most commonly observed values in snowfall are: **0, 25, 13, 51, 76**, as can be seen from the tibble above, with null value excluded.
+
+```{r chunk_p3_2, warning = FALSE}
+jj_data = 
+  noaa1 %>% 
+  filter(month == "Jan"|month == "Jul")
+jj_data %>% 
+  group_by(year, month, id) %>% 
+  mutate(mean_tmax = mean(tmax, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_tmax, color = id)) + 
+  geom_line() +
+  facet_grid(~month) +
+  labs(
+    title = "Yearly plot of max temperature",
+    x = "Year",
+    y = "Average max temperature"
+  ) +
+  theme(legend.position = "none")
+```
+It can be seen from the graph that the average max temperature in January and July in each station fluctuated stably across years, with temperature in January centered approximately around 0 and July around 27. There were also outliers in each month, like the extreme low temperature in July around 1982 and June around 1988.
+
+```{r chunk_p3_3, warning = FALSE}
+tmax_data = 
+  noaa1 %>%
+  select(year, month, tmax, tmin) %>% 
+  pivot_longer(
+    tmax:tmin,
+    names_to = "observation", 
+    values_to = "temp") %>% 
+  ggplot(aes(x = temp, fill = observation)) +
+  geom_density(alpha = .5) +
+  viridis::scale_fill_viridis(discrete = TRUE)
+
+snow_data = 
+  noaa1 %>% 
+  filter(snow > 0 & snow < 100) %>%
+  mutate(year = as.factor(year)) %>% 
+  ggplot(aes(x = snow, y = year)) + 
+  geom_density_ridges(scale = .85)
+
+tmax_data/snow_data
+```
+
+The first graph showed the density of tmin and tmax, as we can see, they both followed a uniform-like distribution with the mean lower for tmin and higher for tmax.
+
+The second graph showed the density of snowfall for each year, we can see that the heights were mostly within 0mm to 40mm.
+
